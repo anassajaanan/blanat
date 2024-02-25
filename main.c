@@ -130,10 +130,11 @@ void process_segment(const char *segment, size_t length) {
 }
 
 
-int deserialize_city(FILE* file, struct City* city)
+int deserialize_city(FILE* file, struct City *city)
 {
 	// read city name length
 	size_t cityNameLength;
+	char cityName[MAX_CITY_LENGTH] = {0};
 	if (fread(&cityNameLength, sizeof(size_t), 1, file) < 1)
 	{
 		return -1;
@@ -141,6 +142,8 @@ int deserialize_city(FILE* file, struct City* city)
 	city->name = (char *)malloc(cityNameLength + 1);
 	fread(city->name, sizeof(char), cityNameLength, file);
 	city->name[cityNameLength] = '\0';
+
+
 	fread(&city->total, sizeof(double), 1, file);
 
 	// read number of products
@@ -150,8 +153,8 @@ int deserialize_city(FILE* file, struct City* city)
 	{
 		size_t productNameLength;
 		double price;
+		char productName[MAX_PRODUCT_LENGTH] = {0};
 		fread(&productNameLength, sizeof(size_t), 1, file);
-		char *productName = (char *)malloc(productNameLength + 1);
 		fread(productName, sizeof(char), productNameLength, file);
 		productName[productNameLength] = '\0';
 		fread(&price, sizeof(double), 1, file);
@@ -162,7 +165,7 @@ int deserialize_city(FILE* file, struct City* city)
 			perror("Product not found");
 			exit(EXIT_FAILURE);
 		}
-		city->products[productEntry->productIndex].name = productName;
+		city->products[productEntry->productIndex].name = (char *)productEntry->name;
 		city->products[productEntry->productIndex].price = price;
 	}
 	return (0);
@@ -177,29 +180,6 @@ void aggregate_city(struct City aggregatedCities[MAX_CITIES], struct City* newCi
 		perror("City not found");
 		exit(EXIT_FAILURE);
 	}
-
-	// if (aggregatedCities[cityEntry->cityIndex] == NULL)
-	// {
-	// 	aggregatedCities[cityEntry->cityIndex] = newCity;
-	// }
-	// else
-	// {
-	// 	aggregatedCities[cityEntry->cityIndex]->total += newCity->total;
-	// 	for (int i = 0; i < MAX_PRODUCTS; i++)
-	// 	{
-	// 		if (newCity->products[i].name)
-	// 		{
-	// 			if (aggregatedCities[cityEntry->cityIndex]->products[i].name == NULL)
-	// 			{
-	// 				aggregatedCities[cityEntry->cityIndex]->products[i] = newCity->products[i];
-	// 			}
-	// 			else if (aggregatedCities[cityEntry->cityIndex]->products[i].price > newCity->products[i].price)
-	// 			{
-	// 				aggregatedCities[cityEntry->cityIndex]->products[i] = newCity->products[i];
-	// 			}
-	// 		}
-	// 	}
-	// }
 
 	if (aggregatedCities[cityEntry->cityIndex].name == NULL)
 	{
@@ -246,8 +226,7 @@ void	parent_process_task(pid_t pids[NUM_CHILDREN])
 		{
 			while (!feof(file))
 			{
-				
-				// struct City *newCity = (struct City *)malloc(sizeof(struct City));
+				// struct City newCity = {0};
 				struct City newCity = {0};
 				if (deserialize_city(file, &newCity) == -1)
 				{
@@ -271,10 +250,6 @@ void	parent_process_task(pid_t pids[NUM_CHILDREN])
 
 	for (int i = 0; i < MAX_CITIES; ++i) 
 	{
-		// if (aggregatedCities[i] && aggregatedCities[i]->total < minTotal) {
-		// 	minTotal = aggregatedCities[i]->total;
-		// 	minCityIndex = i;
-		// }
 		if (aggregatedCities[i].name && aggregatedCities[i].total < minTotal) {
 			minTotal = aggregatedCities[i].total;
 			minCityIndex = i;
