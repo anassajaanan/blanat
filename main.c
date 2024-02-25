@@ -211,6 +211,20 @@ void aggregate_city(struct City aggregatedCities[MAX_CITIES], struct City* newCi
 
 }
 
+int compareProducts(const void *a, const void *b)
+{
+	const struct Product *productA = (const struct Product *)a;
+	const struct Product *productB = (const struct Product *)b;
+
+	if (productA->name == NULL) return (productB->name) ? 1 : 0;
+	if (productB->name == NULL) return -1;
+
+	if (productA->price < productB->price) return -1;
+	if (productA->price > productB->price) return 1;
+
+	return strcmp(productA->name, productB->name);
+}
+
 
 void	parent_process_task(pid_t pids[NUM_CHILDREN])
 {
@@ -257,8 +271,28 @@ void	parent_process_task(pid_t pids[NUM_CHILDREN])
 	}
 
 	if (minCityIndex != -1) {
-		printf("Cheapest city: %s with total price: %.2f\n", aggregatedCities[minCityIndex].name, minTotal);
-	} else {
+		// printf("Cheapest city: %s with total price: %.2f\n", aggregatedCities[minCityIndex].name, minTotal);
+		qsort(aggregatedCities[minCityIndex].products, MAX_PRODUCTS, sizeof(struct Product), compareProducts);
+
+		// write the result to output.txt
+		FILE *outputFile = fopen("output.txt", "w");
+		if (outputFile)
+		{
+			// fprintf(outputFile, "Cheapest city: %s with total price: %.2f\n", aggregatedCities[minCityIndex].name, minTotal);
+			fprintf(outputFile, "%s %.2f\n", aggregatedCities[minCityIndex].name, minTotal);
+			for (int i = 0; i < 5; i++)
+			{
+				if (aggregatedCities[minCityIndex].products[i].name != NULL)
+				{
+					// fprintf(outputFile, "%s, %.2f\n", aggregatedCities[minCityIndex].products[i].name, aggregatedCities[minCityIndex].products[i].price);
+					fprintf(outputFile, "%s %.2f\n", aggregatedCities[minCityIndex].products[i].name, aggregatedCities[minCityIndex].products[i].price);
+				}
+			}
+			fclose(outputFile);
+		}
+	}
+	else
+	{
 		printf("No cities processed.\n");
 	}
 
@@ -268,6 +302,8 @@ void	parent_process_task(pid_t pids[NUM_CHILDREN])
 		remove(filePaths[i]);
 	}
 }
+
+
 
 
 int main() {
