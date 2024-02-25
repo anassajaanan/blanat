@@ -328,8 +328,10 @@ const struct ProductEntry *get_product_index_by_name(const char *str, size_t len
             {
                 const char *s = wordlist[index].name;
 
-              if (*str == *s && !strcmp (str + 1, s + 1))
-                return &wordlist[index];
+            //   if (*str == *s && !strcmp (str + 1, s + 1))
+            //     return &wordlist[index];
+				if (*str == *s && !strncmp(str + 1, s + 1, len - 1))
+					return &wordlist[index];
             }
           else if (index < -TOTAL_KEYWORDS)
             {
@@ -341,9 +343,11 @@ const struct ProductEntry *get_product_index_by_name(const char *str, size_t len
                 {
                     const char *s = wordptr->name;
 
-                  if (*str == *s && !strcmp (str + 1, s + 1))
-                    return wordptr;
-                  wordptr++;
+                //   if (*str == *s && !strcmp (str + 1, s + 1))
+                //     return wordptr;
+					if (*str == *s && !strncmp(str + 1, s + 1, len - 1))
+						return wordptr;
+                  	wordptr++;
                 }
             }
         }

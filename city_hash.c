@@ -98,6 +98,7 @@ unsigned int hash_(const char *str, unsigned int len)
   return hval;
 }
 
+
 // static inline const struct CityEntry *get_city_index_by_name(const char *str, unsigned int len)
 const struct CityEntry *get_city_index_by_name(const char *str, unsigned int len) // update it to static
 {
@@ -358,7 +359,7 @@ const struct CityEntry *get_city_index_by_name(const char *str, unsigned int len
       {"Figuig", 53}
     };
 
-  if (len <= MAX_WORD_LENGTH_ && len >= MIN_WORD_LENGTH)
+	if (len <= MAX_WORD_LENGTH_ && len >= MIN_WORD_LENGTH)
     {
       unsigned int key = hash_(str, len);
 
@@ -366,8 +367,10 @@ const struct CityEntry *get_city_index_by_name(const char *str, unsigned int len
         {
           const char *s = wordlist[key].name;
 
-          if (*str == *s && !strcmp (str + 1, s + 1))
-            return &wordlist[key];
+        //   if (*str == *s && !strcmp (str + 1, s + 1))
+        //     return &wordlist[key];
+			if (*str == *s && !strncmp (str + 1, s + 1, len - 1) && s[len] == '\0')
+				return &wordlist[key];
         }
     }
   return 0;
