@@ -1,43 +1,13 @@
 #include "main.h"
 #include <float.h> // For DBL_MAX
 #include <stdio.h>
-#include <sys/_types/_pid_t.h>
-#include <sys/_types/_size_t.h>
 
 
-struct City *cities[MAX_CITIES] = {0};
+struct City cities[MAX_CITIES] = {0};
 
 #define NUM_CHILDREN 16
 
-void find_cheapest_city() {
-    double minTotal = DBL_MAX;
-    int minCityIndex = -1; // -1 indicates no city found yet
 
-    for (int i = 0; i < MAX_CITIES; ++i) {
-        if (cities[i] && cities[i]->total < minTotal) {
-            minTotal = cities[i]->total;
-            minCityIndex = i;
-        }
-    }
-
-    if (minCityIndex != -1) {
-        printf("Cheapest city: %s with total price: %.2f\n", cities[minCityIndex]->name, minTotal);
-    } else {
-        printf("No cities processed.\n");
-    }
-}
-
-struct City *initialize_city(const struct CityEntry *cityEntry)
-{
-    struct City *city = (struct City *)malloc(sizeof(struct City));
-    if (city) {
-        city->name = (char *)cityEntry->name; // Direct assignment
-        city->total = 0;
-        // Initialize the products array to zeros or NULLs as appropriate
-        memset(city->products, 0, sizeof(city->products));
-    }
-    return city;
-}
 
 void update_city_and_product_totals(const char *cityName, size_t cityNameLength, const char *productName, size_t productNameLength, double price)
 {
@@ -48,16 +18,10 @@ void update_city_and_product_totals(const char *cityName, size_t cityNameLength,
 		exit(EXIT_FAILURE);
 	}
 
-	struct City *city = cities[cityEntry->cityIndex];
-	if (!city)
+	struct City *city = &cities[cityEntry->cityIndex];
+	if (city->name == NULL)
 	{
-		city = initialize_city(cityEntry);
-		if (!city)
-		{
-			perror("Error allocating memory for city");
-			exit(EXIT_FAILURE);
-		}
-		cities[cityEntry->cityIndex] = city;
+		city->name = (char *)cityEntry->name;
 	}
 
 	const struct ProductEntry *productEntry = get_product_index_by_name(productName, productNameLength);
@@ -115,9 +79,9 @@ void child_process_task() {
     if (file) {
         // Serialize cities array and write to file
         for (int i = 0; i < MAX_CITIES; i++) {
-            if (cities[i] != NULL) {
-                serialize_city(file, cities[i]);
-            }
+			if (cities[i].name != NULL) {
+				serialize_city(file, &cities[i]);
+			}
         }
         fclose(file);
     }
@@ -158,17 +122,10 @@ void process_segment(const char *segment, size_t length) {
 
 			// Process the line
 			update_city_and_product_totals(cityName, cityNameLength, productName, productNameLength, price);
-
-             
-
         }
-
         // Move to the start of the next line
         line_start = line_end + 1;
     }
-
-	// find the city with min total price
-	// find_cheapest_city();
 	child_process_task();
 }
 
@@ -207,12 +164,12 @@ int deserialize_city(FILE* file, struct City* city)
 		}
 		city->products[productEntry->productIndex].name = productName;
 		city->products[productEntry->productIndex].price = price;
-
 	}
 	return (0);
 }
 
-void aggregate_city(struct City* aggregatedCities[], struct City* newCity)
+// void aggregate_city(struct City* aggregatedCities[], struct City* newCity)
+void aggregate_city(struct City aggregatedCities[MAX_CITIES], struct City* newCity)
 {
 	const struct CityEntry *cityEntry = get_city_index_by_name(newCity->name, strlen(newCity->name));
 	if (!cityEntry)
@@ -221,35 +178,65 @@ void aggregate_city(struct City* aggregatedCities[], struct City* newCity)
 		exit(EXIT_FAILURE);
 	}
 
-	if (aggregatedCities[cityEntry->cityIndex] == NULL)
+	// if (aggregatedCities[cityEntry->cityIndex] == NULL)
+	// {
+	// 	aggregatedCities[cityEntry->cityIndex] = newCity;
+	// }
+	// else
+	// {
+	// 	aggregatedCities[cityEntry->cityIndex]->total += newCity->total;
+	// 	for (int i = 0; i < MAX_PRODUCTS; i++)
+	// 	{
+	// 		if (newCity->products[i].name)
+	// 		{
+	// 			if (aggregatedCities[cityEntry->cityIndex]->products[i].name == NULL)
+	// 			{
+	// 				aggregatedCities[cityEntry->cityIndex]->products[i] = newCity->products[i];
+	// 			}
+	// 			else if (aggregatedCities[cityEntry->cityIndex]->products[i].price > newCity->products[i].price)
+	// 			{
+	// 				aggregatedCities[cityEntry->cityIndex]->products[i] = newCity->products[i];
+	// 			}
+	// 		}
+	// 	}
+	// }
+
+	if (aggregatedCities[cityEntry->cityIndex].name == NULL)
 	{
-		aggregatedCities[cityEntry->cityIndex] = newCity;
+		aggregatedCities[cityEntry->cityIndex].name = newCity->name;
+		aggregatedCities[cityEntry->cityIndex].total = newCity->total;
+		aggregatedCities[cityEntry->cityIndex].numProducts = newCity->numProducts;
 	}
 	else
 	{
-		aggregatedCities[cityEntry->cityIndex]->total += newCity->total;
-		for (int i = 0; i < MAX_PRODUCTS; i++)
+		aggregatedCities[cityEntry->cityIndex].total += newCity->total;
+	}
+
+	for (int i = 0; i < MAX_PRODUCTS; i++)
+	{
+		if (newCity->products[i].name)
 		{
-			if (newCity->products[i].name)
+			if (aggregatedCities[cityEntry->cityIndex].products[i].name == NULL)
 			{
-				if (aggregatedCities[cityEntry->cityIndex]->products[i].name == NULL)
-				{
-					aggregatedCities[cityEntry->cityIndex]->products[i] = newCity->products[i];
-				}
-				else if (aggregatedCities[cityEntry->cityIndex]->products[i].price > newCity->products[i].price)
-				{
-					aggregatedCities[cityEntry->cityIndex]->products[i] = newCity->products[i];
-				}
+				// aggregatedCities[cityEntry->cityIndex].products[i] = newCity->products[i];
+				aggregatedCities[cityEntry->cityIndex].products[i].name = newCity->products[i].name;
+				aggregatedCities[cityEntry->cityIndex].products[i].price = newCity->products[i].price;
+			}
+			else if (aggregatedCities[cityEntry->cityIndex].products[i].price > newCity->products[i].price)
+			{
+				aggregatedCities[cityEntry->cityIndex].products[i].price = newCity->products[i].price;
 			}
 		}
 	}
+
 }
 
 
 void	parent_process_task(pid_t pids[NUM_CHILDREN])
 {
 	char filePaths[NUM_CHILDREN][256];
-	struct City *aggregatedCities[MAX_CITIES] = {0};
+	// struct City *aggregatedCities[MAX_CITIES] = {0};
+	struct City aggregatedCities[MAX_CITIES] = {0};
 
 	for (int i = 0; i < NUM_CHILDREN; i++)
 	{
@@ -260,14 +247,15 @@ void	parent_process_task(pid_t pids[NUM_CHILDREN])
 			while (!feof(file))
 			{
 				
-				struct City *newCity = (struct City *)malloc(sizeof(struct City));
-				if (deserialize_city(file, newCity) == -1)
+				// struct City *newCity = (struct City *)malloc(sizeof(struct City));
+				struct City newCity = {0};
+				if (deserialize_city(file, &newCity) == -1)
 				{
 					break;
 				}
 
 				
-				aggregate_city(aggregatedCities, newCity);
+				aggregate_city(aggregatedCities, &newCity);
 				
 
 			}
@@ -281,15 +269,20 @@ void	parent_process_task(pid_t pids[NUM_CHILDREN])
 	double minTotal = DBL_MAX;
 	int minCityIndex = -1; // -1 indicates no city found yet
 
-	for (int i = 0; i < MAX_CITIES; ++i) {
-		if (aggregatedCities[i] && aggregatedCities[i]->total < minTotal) {
-			minTotal = aggregatedCities[i]->total;
+	for (int i = 0; i < MAX_CITIES; ++i) 
+	{
+		// if (aggregatedCities[i] && aggregatedCities[i]->total < minTotal) {
+		// 	minTotal = aggregatedCities[i]->total;
+		// 	minCityIndex = i;
+		// }
+		if (aggregatedCities[i].name && aggregatedCities[i].total < minTotal) {
+			minTotal = aggregatedCities[i].total;
 			minCityIndex = i;
 		}
 	}
 
 	if (minCityIndex != -1) {
-		printf("Cheapest city: %s with total price: %.2f\n", aggregatedCities[minCityIndex]->name, minTotal);
+		printf("Cheapest city: %s with total price: %.2f\n", aggregatedCities[minCityIndex].name, minTotal);
 	} else {
 		printf("No cities processed.\n");
 	}
@@ -320,26 +313,6 @@ int main() {
         return EXIT_FAILURE;
     }
 
-    // const off_t segment_size = sb.st_size / NUM_CHILDREN;
-    // for (int i = 0; i < NUM_CHILDREN; i++) {
-    //     // pid_t pid = fork();
-	// 	pids[i] = fork();
-    //     if (pids[i] == 0) { // Child
-    //         off_t offset = i * segment_size;
-    //         size_t size = (i == NUM_CHILDREN - 1) ? (sb.st_size - offset) : segment_size;
-    //         // Process segment [file_in_memory + offset] with size `size`
-    //         printf("Child %d processing segment starting at %lld\n", i, offset);
-    //         // Example processing code here
-	// 		process_segment(file_in_memory + offset, size);
-
-    //         munmap(file_in_memory, sb.st_size);
-    //         close(fd);
-    //         exit(EXIT_SUCCESS);
-    //     } else if (pids[i] < 0) {
-    //         perror("fork failed");
-    //         exit(EXIT_FAILURE);
-    //     }
-    // }
 	const off_t initial_segment_size = sb.st_size / NUM_CHILDREN;
 	off_t current_offset = 0;
 
