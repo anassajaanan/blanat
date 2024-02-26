@@ -126,7 +126,7 @@ void process_segment(const char *segment, size_t length) {
         // Move to the start of the next line
         line_start = line_end + 1;
     }
-	child_process_task();
+	// child_process_task();
 }
 
 
@@ -372,7 +372,7 @@ int main() {
     close(fd);
 
 	// parent process task
-	parent_process_task(pids);
+	// parent_process_task(pids);
 
     return EXIT_SUCCESS;
 }
