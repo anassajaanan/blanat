@@ -1,15 +1,17 @@
 #include "main.h"
-#include <float.h> // For DBL_MAX
+#include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 
 struct City cities[MAX_CITIES] = {0};
 
-#define NUM_CHILDREN 16
+#define NUM_CHILDREN 35
 
 
 
-void update_city_and_product_totals(const char *cityName, size_t cityNameLength, const char *productName, size_t productNameLength, double price)
+void update_city_and_product_totals(const char *cityName, size_t cityNameLength, const char *productName, size_t productNameLength, uint32_t price)
 {
 	const struct CityEntry *cityEntry = get_city_index_by_name(cityName, cityNameLength);
 	if (!cityEntry)
@@ -47,14 +49,11 @@ void update_city_and_product_totals(const char *cityName, size_t cityNameLength,
 
 void	serialize_city(FILE *file, const struct City *city)
 {
-
-	// write city name length
 	size_t cityNameLength = strlen(city->name);
 	fwrite(&cityNameLength, sizeof(size_t), 1, file);
 	fwrite(city->name, sizeof(char), cityNameLength, file);
-	fwrite(&city->total, sizeof(double), 1, file);
+	fwrite(&city->total, sizeof(uint64_t), 1, file);
 
-	// write number of products
 	fwrite(&city->numProducts, sizeof(int), 1, file);
 
 	for (int i = 0; i < MAX_PRODUCTS; i++)
@@ -64,20 +63,17 @@ void	serialize_city(FILE *file, const struct City *city)
 			size_t productNameLength = strlen(city->products[i].name);
 			fwrite(&productNameLength, sizeof(size_t), 1, file);
 			fwrite(city->products[i].name, sizeof(char), productNameLength, file);
-			fwrite(&city->products[i].price, sizeof(double), 1, file);
+			fwrite(&city->products[i].price, sizeof(uint32_t), 1, file);
 		}
 	}
-
 }
 
 void child_process_task() {
-    // Prepare file path using PID or another unique identifier
     char filePath[256];
     snprintf(filePath, sizeof(filePath), "results_%d.bin", getpid());
 
     FILE* file = fopen(filePath, "wb");
     if (file) {
-        // Serialize cities array and write to file
         for (int i = 0; i < MAX_CITIES; i++) {
 			if (cities[i].name != NULL) {
 				serialize_city(file, &cities[i]);
@@ -85,6 +81,27 @@ void child_process_task() {
         }
         fclose(file);
     }
+}
+
+static inline uint32_t parse_price_component(char *component_str, uint32_t component_len) {
+  // Predefined values for subtracting ASCII zero ('0') based on the component length
+  static uint32_t ascii_zero_offset[4] = {0, '0', 11 * '0', 111 * '0'};
+  
+  // Multipliers for each digit position, depending on the component length
+  static uint32_t digit_multipliers[3][4] = {
+    {0, 1, 10, 100},   // Multipliers for the first digit
+    {0, 0, 1,  10},    // Multipliers for the second digit
+    {0, 0, 0,  1},     // Multipliers for the third digit
+  };
+  
+  // Calculate and return the integer value of the price component
+  uint32_t result = (
+    digit_multipliers[0][component_len] * component_str[0] + 
+    digit_multipliers[1][component_len] * component_str[1] + 
+    digit_multipliers[2][component_len] * component_str[2] -
+    ascii_zero_offset[component_len]
+  );
+  return result;
 }
 
 void process_segment(const char *segment, size_t length) {
@@ -104,21 +121,29 @@ void process_segment(const char *segment, size_t length) {
             // Extract cityName
             char cityName[MAX_CITY_LENGTH] = {0};
             size_t cityNameLength = first_comma - line_start;
-            if (cityNameLength < sizeof(cityName)) {
-                memcpy(cityName, line_start, cityNameLength);
-                cityName[cityNameLength] = '\0';
-            }
+            memcpy(cityName, line_start, cityNameLength);
+            cityName[cityNameLength] = '\0';
 
             // Extract productName
             char productName[MAX_PRODUCT_LENGTH] = {0};
             size_t productNameLength = second_comma - first_comma - 1;
-            if (productNameLength < sizeof(productName)) {
-                memcpy(productName, first_comma + 1, productNameLength);
-                productName[productNameLength] = '\0';
-            }
+            memcpy(productName, first_comma + 1, productNameLength);
+            productName[productNameLength] = '\0';
 
             // Extract price
-            double price = atof(second_comma + 1);
+            // double price = atof(second_comma + 1);
+			char* price_d = (char *)second_comma + 1;
+   			size_t price_d_len = 0;
+			while (price_d[price_d_len] != '.' && &price_d[price_d_len] < line_end)
+				price_d_len++;
+			uint32_t price_decimal = parse_price_component(price_d, price_d_len);
+
+			char *price_f = price_d + price_d_len + 1;
+			size_t price_f_len = line_end - price_f;
+			uint32_t price_fractional = parse_price_component(price_f, price_f_len);
+			price_fractional *= (price_f_len < 2) ? 10 : 1;
+
+			uint32_t price = price_decimal * 100 + price_fractional;
 
 			// Process the line
 			update_city_and_product_totals(cityName, cityNameLength, productName, productNameLength, price);
@@ -126,38 +151,30 @@ void process_segment(const char *segment, size_t length) {
         // Move to the start of the next line
         line_start = line_end + 1;
     }
-	// child_process_task();
+	child_process_task();
 }
 
 
 int deserialize_city(FILE* file, struct City *city)
 {
-	// read city name length
 	size_t cityNameLength;
-	char cityName[MAX_CITY_LENGTH] = {0};
-	if (fread(&cityNameLength, sizeof(size_t), 1, file) < 1)
-	{
-		return -1;
-	}
+	if (fread(&cityNameLength, sizeof(size_t), 1, file) < 1) return -1;
 	city->name = (char *)malloc(cityNameLength + 1);
 	fread(city->name, sizeof(char), cityNameLength, file);
 	city->name[cityNameLength] = '\0';
-
-
-	fread(&city->total, sizeof(double), 1, file);
-
-	// read number of products
+	fread(&city->total, sizeof(uint64_t), 1, file);
 	fread(&city->numProducts, sizeof(int), 1, file);
 
 	for (int i = 0; i < city->numProducts; i++)
 	{
+		uint32_t price;
 		size_t productNameLength;
-		double price;
 		char productName[MAX_PRODUCT_LENGTH] = {0};
+
 		fread(&productNameLength, sizeof(size_t), 1, file);
 		fread(productName, sizeof(char), productNameLength, file);
 		productName[productNameLength] = '\0';
-		fread(&price, sizeof(double), 1, file);
+		fread(&price, sizeof(uint32_t), 1, file);
 
 		const struct ProductEntry *productEntry = get_product_index_by_name(productName, productNameLength);
 		if (!productEntry)
@@ -171,7 +188,6 @@ int deserialize_city(FILE* file, struct City *city)
 	return (0);
 }
 
-// void aggregate_city(struct City* aggregatedCities[], struct City* newCity)
 void aggregate_city(struct City aggregatedCities[MAX_CITIES], struct City* newCity)
 {
 	const struct CityEntry *cityEntry = get_city_index_by_name(newCity->name, strlen(newCity->name));
@@ -188,9 +204,7 @@ void aggregate_city(struct City aggregatedCities[MAX_CITIES], struct City* newCi
 		aggregatedCities[cityEntry->cityIndex].numProducts = newCity->numProducts;
 	}
 	else
-	{
 		aggregatedCities[cityEntry->cityIndex].total += newCity->total;
-	}
 
 	for (int i = 0; i < MAX_PRODUCTS; i++)
 	{
@@ -198,7 +212,6 @@ void aggregate_city(struct City aggregatedCities[MAX_CITIES], struct City* newCi
 		{
 			if (aggregatedCities[cityEntry->cityIndex].products[i].name == NULL)
 			{
-				// aggregatedCities[cityEntry->cityIndex].products[i] = newCity->products[i];
 				aggregatedCities[cityEntry->cityIndex].products[i].name = newCity->products[i].name;
 				aggregatedCities[cityEntry->cityIndex].products[i].price = newCity->products[i].price;
 			}
@@ -208,7 +221,6 @@ void aggregate_city(struct City aggregatedCities[MAX_CITIES], struct City* newCi
 			}
 		}
 	}
-
 }
 
 int compareProducts(const void *a, const void *b)
@@ -229,7 +241,6 @@ int compareProducts(const void *a, const void *b)
 void	parent_process_task(pid_t pids[NUM_CHILDREN])
 {
 	char filePaths[NUM_CHILDREN][256];
-	// struct City *aggregatedCities[MAX_CITIES] = {0};
 	struct City aggregatedCities[MAX_CITIES] = {0};
 
 	for (int i = 0; i < NUM_CHILDREN; i++)
@@ -240,28 +251,17 @@ void	parent_process_task(pid_t pids[NUM_CHILDREN])
 		{
 			while (!feof(file))
 			{
-				// struct City newCity = {0};
 				struct City newCity = {0};
-				if (deserialize_city(file, &newCity) == -1)
-				{
-					break;
-				}
+				if (deserialize_city(file, &newCity) == -1) break;
 
-				
 				aggregate_city(aggregatedCities, &newCity);
-				
-
 			}
 		}
 		fclose(file);
 	}
 
-	// find the city with min total price
-	// printf("Aggregated cities\n");
-	// find_cheapest_city();
-	double minTotal = DBL_MAX;
+	uint64_t minTotal = UINT64_MAX;
 	int minCityIndex = -1; // -1 indicates no city found yet
-
 	for (int i = 0; i < MAX_CITIES; ++i) 
 	{
 		if (aggregatedCities[i].name && aggregatedCities[i].total < minTotal) {
@@ -271,36 +271,27 @@ void	parent_process_task(pid_t pids[NUM_CHILDREN])
 	}
 
 	if (minCityIndex != -1) {
-		// printf("Cheapest city: %s with total price: %.2f\n", aggregatedCities[minCityIndex].name, minTotal);
 		qsort(aggregatedCities[minCityIndex].products, MAX_PRODUCTS, sizeof(struct Product), compareProducts);
-
-		// write the result to output.txt
 		FILE *outputFile = fopen("output.txt", "w");
 		if (outputFile)
 		{
-			// fprintf(outputFile, "Cheapest city: %s with total price: %.2f\n", aggregatedCities[minCityIndex].name, minTotal);
-			fprintf(outputFile, "%s %.2f\n", aggregatedCities[minCityIndex].name, minTotal);
+			fprintf(outputFile, "%s %lu.%02lu\n", aggregatedCities[minCityIndex].name, minTotal / 100, minTotal % 100);
 			for (int i = 0; i < 5; i++)
 			{
 				if (aggregatedCities[minCityIndex].products[i].name != NULL)
 				{
-					// fprintf(outputFile, "%s, %.2f\n", aggregatedCities[minCityIndex].products[i].name, aggregatedCities[minCityIndex].products[i].price);
-					fprintf(outputFile, "%s %.2f\n", aggregatedCities[minCityIndex].products[i].name, aggregatedCities[minCityIndex].products[i].price);
+					uint32_t price = aggregatedCities[minCityIndex].products[i].price;
+					fprintf(outputFile, "%s %u.%02u\n", aggregatedCities[minCityIndex].products[i].name, price / 100, price % 100);
 				}
 			}
 			fclose(outputFile);
 		}
 	}
 	else
-	{
 		printf("No cities processed.\n");
-	}
 
-	// remove the files
 	for (int i = 0; i < NUM_CHILDREN; i++)
-	{
 		remove(filePaths[i]);
-	}
 }
 
 
@@ -371,8 +362,9 @@ int main() {
     munmap(file_in_memory, sb.st_size);
     close(fd);
 
-	// parent process task
-	// parent_process_task(pids);
+
+
+	parent_process_task(pids);
 
     return EXIT_SUCCESS;
 }
