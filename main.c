@@ -7,18 +7,16 @@
 #include <sys/fcntl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
-#include<sys/wait.h>
-// #include <emmintrin.h>
-// #include <immintrin.h>
-// #include <x86intrin.h>
-// #include <nmmintrin.h>
+#include <sys/wait.h>
+
+
 
 #define MAX_CITIES 101
 #define MAX_PRODUCTS 100
 
 #define MAX_CITY_LENGTH 18 // 17 characters + null terminator
 #define MAX_PRODUCT_LENGTH 17 // 16 characters + null terminator
-#define MAX_LINE_LENGTH (MAX_CITY_LENGTH + MAX_PRODUCT_LENGTH + 6 + 3) // +3 for commas and newline
+#define MAX_LINE_LENGTH 44
 
 
 struct ProductEntry {
@@ -28,7 +26,7 @@ struct ProductEntry {
 
 struct CityEntry {
     const char *name;
-    int			cityIndex;  // This index can be used to access a City object in a global array.
+    int			cityIndex;
 };
 
 struct Product {
@@ -45,7 +43,7 @@ struct City {
 
 struct City cities[MAX_CITIES] = {0};
 
-#define NUM_CHILDREN 35
+#define MAX_TASK_UNITS 16
 
 // #========================= Product Hash Table =========================#
 #if !((' ' == 32) && ('!' == 33) && ('"' == 34) && ('#' == 35) \
@@ -91,9 +89,10 @@ __inline
 inline
 #endif
 #endif
-static unsigned int	hash_product(register const char *str, register size_t len)
+
+static unsigned int	hash_product( const char *str,  size_t len)
 {
-  static unsigned char asso_values_product[] =
+  	static unsigned char asso_values_product[] =
     {
       140, 140, 140, 140, 140, 140, 140, 140, 140, 140,
       140, 140, 140, 140, 140, 140, 140, 140, 140, 140,
@@ -122,10 +121,10 @@ static unsigned int	hash_product(register const char *str, register size_t len)
       140, 140, 140, 140, 140, 140, 140, 140, 140, 140,
       140, 140, 140, 140, 140, 140
     };
-  return len + asso_values_product[(unsigned char)str[2]] + asso_values_product[(unsigned char)str[0]] + asso_values_product[(unsigned char)str[len - 1]];
+  	return len + asso_values_product[(unsigned char)str[2]] + asso_values_product[(unsigned char)str[0]] + asso_values_product[(unsigned char)str[len - 1]];
 }
 
-inline static struct ProductEntry *get_product(register const char *str, register size_t len)
+inline static struct ProductEntry *get_product( const char *str,  size_t len)
 {
   	static struct ProductEntry wordlist_product[] =
     {
@@ -331,7 +330,7 @@ inline static struct ProductEntry *get_product(register const char *str, registe
       {"Dill", 74}
     };
 
-  static short lookup[] =
+  	static short lookup[] =
     {
         -1,   -1,   -1,   -1,   -1,   -1,    0,    1,
         -1,    2,    3,    4,    5,    6,    7, -122,
@@ -353,32 +352,32 @@ inline static struct ProductEntry *get_product(register const char *str, registe
         -1,   -1,   -1,   99
     };
 
-  if (len <= MAX_PRODUCT_LENGTH && len >= MIN_PRODUCT_LENGTH)
+  	if (len <= MAX_PRODUCT_LENGTH && len >= MIN_PRODUCT_LENGTH)
     {
-      register unsigned int key = hash_product(str, len);
+      	 unsigned int key = hash_product(str, len);
 
-      if (key <= MAX_PRODUCT_HASH_VALUE)
+      	if (key <= MAX_PRODUCT_HASH_VALUE)
         {
-          register int index = lookup[key];
+          	 int index = lookup[key];
 
-          if (index >= 0)
+          	if (index >= 0)
             {
-				register const char *s = wordlist_product[index].name;
+				 const char *s = wordlist_product[index].name;
 
 				// if (*str == *s && !strcmp (str + 1, s + 1))
 				// 	return &wordlist[index];
 				if (*str == *s && !strncmp (str + 1, s + 1, len - 1))
 					return &wordlist_product[index];
             }
-          else if (index < -TOTAL_PRODUCT_KEYWORDS)
+          	else if (index < -TOTAL_PRODUCT_KEYWORDS)
             {
-              register int offset = - 1 - TOTAL_PRODUCT_KEYWORDS - index;
-              register struct ProductEntry *wordptr = &wordlist_product[TOTAL_PRODUCT_KEYWORDS + lookup[offset]];
-              register struct ProductEntry *wordendptr = wordptr + -lookup[offset + 1];
+               int offset = - 1 - TOTAL_PRODUCT_KEYWORDS - index;
+               struct ProductEntry *wordptr = &wordlist_product[TOTAL_PRODUCT_KEYWORDS + lookup[offset]];
+               struct ProductEntry *wordendptr = wordptr + -lookup[offset + 1];
 
               while (wordptr < wordendptr)
                 {
-					register const char *s = wordptr->name;
+					 const char *s = wordptr->name;
 
 					// if (*str == *s && !strcmp (str + 1, s + 1))
 					// 	return wordptr;
@@ -394,6 +393,7 @@ inline static struct ProductEntry *get_product(register const char *str, registe
 // #========================= End of Product Hash Table =========================#
 
 // #========================= City Hash Table =========================#
+
 #if !((' ' == 32) && ('!' == 33) && ('"' == 34) && ('#' == 35) \
 	  && ('%' == 37) && ('&' == 38) && ('\'' == 39) && ('(' == 40) \
 	  && (')' == 41) && ('*' == 42) && ('+' == 43) && (',' == 44) \
@@ -435,7 +435,7 @@ __inline
 inline
 #endif
 #endif
-static unsigned int	hash_city(register const char *str, register size_t len)
+static unsigned int	hash_city( const char *str,  size_t len)
 {
 	static unsigned short asso_values_cities[] =
 	{
@@ -466,7 +466,7 @@ static unsigned int	hash_city(register const char *str, register size_t len)
 	  307, 307, 307, 307, 307, 307, 307, 307, 307, 307,
 	  307, 307, 307, 307, 307, 307, 307
 	};
-  register unsigned int hval = len;
+   unsigned int hval = len;
 
   switch (hval)
 	{
@@ -487,10 +487,10 @@ static unsigned int	hash_city(register const char *str, register size_t len)
   return hval;
 }
 
-inline static struct CityEntry *get_city(register const char *str, register size_t len)
+inline static struct CityEntry *get_city( const char *str,  size_t len)
 {
 	
-  static struct CityEntry wordlist_cities[] =
+  	static struct CityEntry wordlist_cities[] =
 	{
 	  {""}, {""}, {""}, {""}, {""}, {""},
 
@@ -730,16 +730,18 @@ inline static struct CityEntry *get_city(register const char *str, register size
 
 	if (len <= MAX_CITY_LENGTH && len >= MIN_CITY_LENGTH)
 	{
-		register unsigned int key = hash_city(str, len);
+		 unsigned int key = hash_city(str, len);
 
 		if (key <= MAX_CITY_HASH_VALUE)
 		{
-			register const char *s = wordlist_cities[key].name;
+			 const char *s = wordlist_cities[key].name;
 
 			// if (*str == *s && !strcmp (str + 1, s + 1))
 			// 	return &wordlist[key];
 			if (*str == *s && !strncmp (str + 1, s + 1, len - 1))
 				return &wordlist_cities[key];
+			// if (*str == *s && !compare_strings_with_ptest(str + 1, s + 1, len - 1))
+			// 	return &wordlist_cities[key];
 		}
 	}
   return 0;
@@ -782,7 +784,7 @@ inline static uint32_t parse_price_component(char *component_str, uint32_t compo
 }
 // #========================= End of Utility Functions =========================#
 
-
+// #========================= Serialization Functions =========================#
 
 inline static void	serialize_city(FILE *file, const struct City *city)
 {
@@ -805,7 +807,7 @@ inline static void	serialize_city(FILE *file, const struct City *city)
 	}
 }
 
-inline static void child_process_task()
+inline static void performDataSerialization()
 {
     char filePath[256];
     snprintf(filePath, sizeof(filePath), "results_%d.bin", getpid());
@@ -820,6 +822,7 @@ inline static void child_process_task()
         fclose(file);
     }
 }
+// #========================= End of Serialization Functions =========================#
 
 inline static void update_city_and_product_totals(struct City *city, const char *cityName, size_t cityNameLength, const char *productName, size_t productNameLength, uint32_t price)
 {
@@ -844,6 +847,8 @@ inline static void update_city_and_product_totals(struct City *city, const char 
 	city->total += price;
 }
 
+
+
 inline static void process_segment(const char *segment, size_t length)
 {
     const char *end = segment + length;
@@ -852,7 +857,7 @@ inline static void process_segment(const char *segment, size_t length)
     while (line_start < end) {
         const char *line_end = (const char *)memchr(line_start, '\n', end - line_start);
         if (!line_end) {
-            line_end = end; // Handle the case where the last line doesn't end with a newline
+            line_end = end;
         }
 
         const char *first_comma = (const char *)memchr(line_start, ',', line_end - line_start);
@@ -884,38 +889,26 @@ inline static void process_segment(const char *segment, size_t length)
 			price_fractional *= (price_f_len < 2) ? 10 : 1;
 
 			uint32_t price = price_decimal * 100 + price_fractional;
-
-
+				
 			const struct CityEntry *cityEntry = get_city(cityName, cityNameLength);
-			// if (!cityEntry)
-			// {
-			// 	printf("City not found: %s\n", cityName);
-			// 	exit(EXIT_FAILURE);
-			// }
+			if (!cityEntry)
+			{
+				printf("City not found: %s\n", cityName);
+				exit(EXIT_FAILURE);
+			}
 
-			// struct City *city = &cities[cityEntry->cityIndex];
-			// if (city->name == NULL)
-			// {
-			// 	city->name = (char *)cityEntry->name;
-			// }
+			struct City *city = &cities[cityEntry->cityIndex];
+			if (city->name == NULL)
+			{
+				city->name = (char *)cityEntry->name;
+			}
 			
-			// if (city->numProductLessThna5 >= 5 && price_decimal > 1)
-			// {
-			// 	city->total += price;
-			// 	line_start = line_end + 1;
-			// 	continue;
-			// }
-			// if (city->name && price_decimal <= 1)
-			// 	city->numProductLessThna5++;
-
-			
-
 			// Process the line
-			// update_city_and_product_totals(city, cityName, cityNameLength, productName, productNameLength, price);
+			update_city_and_product_totals(city, cityName, cityNameLength, productName, productNameLength, price);
         }
         line_start = line_end + 1;
     }
-	// child_process_task();
+	performDataSerialization();
 }
 
 
@@ -988,12 +981,12 @@ inline static void aggregate_city(struct City aggregatedCities[MAX_CITIES], stru
 }
 
 
-inline static void	parent_process_task(pid_t pids[NUM_CHILDREN])
+inline static void	compileAggregatedResults(pid_t pids[MAX_TASK_UNITS])
 {
-	char filePaths[NUM_CHILDREN][256];
+	char filePaths[MAX_TASK_UNITS][256];
 	struct City aggregatedCities[MAX_CITIES] = {0};
 
-	for (int i = 0; i < NUM_CHILDREN; i++)
+	for (int i = 0; i < MAX_TASK_UNITS; i++)
 	{
 		snprintf(filePaths[i], sizeof(filePaths[i]), "results_%d.bin", pids[i]);
 		FILE *file = fopen(filePaths[i], "rb");
@@ -1040,19 +1033,15 @@ inline static void	parent_process_task(pid_t pids[NUM_CHILDREN])
 	else
 		printf("No cities processed.\n");
 
-	for (int i = 0; i < NUM_CHILDREN; i++)
+	for (int i = 0; i < MAX_TASK_UNITS; i++)
 		remove(filePaths[i]);
 }
 
 
-
-
 int main() {
 
-	pid_t pids[NUM_CHILDREN];
-
-    // int fd = open("input.txt", O_RDONLY);
-    int fd = open("/Users/aajaanan/goinfre/input.txt", O_RDONLY);
+	pid_t pids[MAX_TASK_UNITS];
+    int fd = open("res", O_RDONLY);
     struct stat sb;
     if (fd == -1 || fstat(fd, &sb) == -1) {
         perror("Error opening file");
@@ -1065,56 +1054,52 @@ int main() {
         return EXIT_FAILURE;
     }
 
-	const off_t initial_segment_size = sb.st_size / NUM_CHILDREN;
+	const off_t initial_segment_size = sb.st_size / MAX_TASK_UNITS;
 	off_t current_offset = 0;
 
-	for (int i = 0; i < NUM_CHILDREN; i++) {
-		off_t offset = current_offset; // Start of the current segment
-		off_t size = (i == NUM_CHILDREN - 1) ? (sb.st_size - offset) : initial_segment_size;
+	for (int i = 0; i < MAX_TASK_UNITS; i++) {
+		off_t offset = current_offset;
+		off_t size = (i == MAX_TASK_UNITS - 1) ? (sb.st_size - offset) : initial_segment_size;
 
-		if (i != 0) { // Adjust start for all but the first segment
+		if (i != 0) {
 			while (file_in_memory[offset] != '\n' && offset < sb.st_size) {
 				offset++;
 				size--;
 			}
-			offset++; // Skip the newline character
-			size--; // Adjust size after skipping
+			offset++;
+			size--;
 		}
 
-		if (i != NUM_CHILDREN - 1) { // Adjust end for all but the last segment
-			off_t end = offset + size; // Initial end
+		if (i != MAX_TASK_UNITS - 1) {
+			off_t end = offset + size;
 			while (file_in_memory[end] != '\n' && end < sb.st_size) {
 				end++;
 			}
-			size = end - offset + 1; // Include the newline character
+			size = end - offset + 1;
 		}
 
 		pids[i] = fork();
-		if (pids[i] == 0) { // Child
-			printf("Child %d processing segment starting at %lld, size %lld\n", i, offset, size);
+		if (pids[i] == 0) {
 			process_segment(file_in_memory + offset, size);
 			munmap(file_in_memory, sb.st_size);
 			close(fd);
 			exit(EXIT_SUCCESS);
 		} else if (pids[i] < 0) {
-			perror("fork failed");
+			perror("Error");
 			exit(EXIT_FAILURE);
 		}
 
-		current_offset = offset + size; // Prepare offset for the next segment
+		current_offset = offset + size;
 	}
 
-    // Parent waits for all children to complete
-    for (int i = 0; i < NUM_CHILDREN; i++) {
+    for (int i = 0; i < MAX_TASK_UNITS; i++) {
         wait(NULL);
     }
 
     munmap(file_in_memory, sb.st_size);
     close(fd);
 
-
-
-	// parent_process_task(pids);
+	compileAggregatedResults(pids);
 
     return EXIT_SUCCESS;
 }
